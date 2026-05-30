@@ -1,0 +1,50 @@
+name: dbt CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate raw data
+        run: python simulator/main.py
+
+      - name: Load into DuckDB
+        run: python setup.py --full-refresh
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Run snapshot batch 1
+        run: |
+          python simulator/main.py --snapshot-batch=1
+          python setup.py --snapshot-batch=1
+          dbt snapshot
+
+      - name: dbt build
+        run: dbt build
+
+      - name: Generate dbt docs
+        run: dbt docs generate
+
+      - name: Upload dbt docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: target/
