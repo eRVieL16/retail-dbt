@@ -1,0 +1,166 @@
+# docker-compose.yml
+# ===================
+# Retail analytics engineering stack:
+#   - PostgreSQL  : Airflow metadata database
+#   - Airflow     : pipeline orchestration (webserver + scheduler + init)
+#   - dbt         : one-off runner (docker compose run --rm dbt dbt build)
+#   - dbt-docs    : always-on lineage + docs server at http://localhost:8080
+#
+# Credentials and secrets are loaded from .env (see .env.example).
+# Never commit .env to git.
+#
+# Quick start:
+#   cp .env.example .env          # fill in secrets
+#   docker compose build
+#   docker compose up -d
+#   docker compose exec airflow-scheduler airflow dags list
+
+volumes:
+  retail_data:       # retail.duckdb + dbt artifacts (persistent across restarts)
+    driver: local
+  airflow_db:        # PostgreSQL data directory
+    driver: local
+  airflow_logs:      # Airflow task logs
+    driver: local
+  retail_raw_data:   # Hive-partitioned Parquet files from simulator
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Shared environment — all dbt/pipeline env vars in one place.
+# Override any value in .env without touching this file.
+# ---------------------------------------------------------------------------
+x-dbt-env: &dbt-env
+  RETAIL_DBT_PROJECT_DIR: /project
+  RETAIL_DBT_PROFILES_DIR: /project
+  RETAIL_PYTHON_BIN: python
+  RETAIL_DBT_BIN: dbt
+  RETAIL_SNAPSHOT_BATCHES: "3"
+  DUCKDB_PATH: /data/retail.duckdb
+  DBT_TARGET_PATH: /data/dbt_target    # dbt artifacts on Docker volume, not Windows bind-mount
+  DBT_LOG_PATH: /data/dbt_logs
+  AIRFLOW__CORE__DEFAULT_TASK_EXECUTION_TIMEOUT: "3600"
+  # Optional: set in .env to enable Slack alerts on task failure
+  # SLACK_WEBHOOK_URL: https://hooks.slack.com/services/XXX/YYY/ZZZ
+
+# ---------------------------------------------------------------------------
+# Shared Airflow config — webserver, scheduler, and init all use this block.
+# Add individual overrides under each service as needed.
+# ---------------------------------------------------------------------------
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.airflow
+  image: retail-airflow:latest
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    # Credentials loaded from .env — never hardcoded here.
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
+    <<: *dbt-env
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - airflow_logs:/opt/airflow/logs
+    - retail_data:/data
+    - retail_raw_data:/project/retail_raw_data
+    - .:/project
+
+services:
+
+  # ── PostgreSQL — Airflow metadata database ─────────────────────────────
+  # Credentials come from .env, not hardcoded.
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - airflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Airflow init — runs once to migrate DB and create admin user ────────
+  # restart: on-failure ensures it retries if postgres isn't ready yet.
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create
+          --username ${AIRFLOW_ADMIN_USER}
+          --password ${AIRFLOW_ADMIN_PASSWORD}
+          --firstname Admin
+          --lastname User
+          --role Admin
+          --email ${AIRFLOW_ADMIN_EMAIL}
+      "
+    restart: on-failure
+
+  # ── Airflow webserver — UI at http://localhost:8088 ────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    command: airflow webserver
+    ports:
+      - "8088:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Airflow scheduler — picks up DAG runs on schedule ──────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    command: airflow scheduler
+    restart: unless-stopped
+
+  # ── dbt one-off runner ─────────────────────────────────────────────────
+  # Not a long-running service — use via:
+  #   docker compose run --rm dbt dbt build
+  #   docker compose run --rm dbt python simulator/main.py
+  dbt:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dbt
+    image: retail-dbt:latest
+    environment:
+      <<: *dbt-env
+    volumes:
+      - .:/project
+      - retail_data:/data
+      - retail_raw_data:/project/retail_raw_data
+    working_dir: /project
+
+  # ── dbt docs server — lineage graph at http://localhost:8080 ───────────
+  # Reads from the same retail_data volume as Airflow so docs reflect the
+  # latest dbt build without any manual sync.
+  dbt-docs:
+    image: retail-dbt:latest
+    environment:
+      <<: *dbt-env
+    volumes:
+      - .:/project
+      - retail_data:/data
+      - retail_raw_data:/project/retail_raw_data
+    working_dir: /project
+    command: >
+      sh -c "dbt docs generate --profiles-dir /project --target-path /data/dbt_target &&
+             dbt docs serve --profiles-dir /project --port 8080 --host 0.0.0.0"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

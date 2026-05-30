@@ -1,0 +1,51 @@
+# docker/Dockerfile.dbt
+# =====================
+# Image untuk menjalankan:
+#   - Python simulator (simulator/main.py)
+#   - setup.py (load Parquet → DuckDB)
+#   - dbt Core + DuckDB adapter
+#   - Elementary (edr report)
+#   - run_audit.py
+
+FROM python:3.12-slim
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Buat folder retail_raw_data dengan permission yang benar
+# sebelum switch ke user airflow
+
+RUN mkdir -p /project/retail_raw_data /data \
+    && chown -R airflow:root /project/retail_raw_data /data \
+    && chmod -R 775 /project/retail_raw_data /data
+
+WORKDIR /project
+
+# Install Python deps dulu (layer terpisah supaya cache hit saat code berubah)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dbt DuckDB adapter + Elementary
+RUN pip install --no-cache-dir \
+    dbt-duckdb \
+    elementary-data 
+
+# Copy seluruh project
+COPY . .
+
+# Install dbt packages (requires packages.yml and profiles.yml)
+# We use --profiles-dir . because your profiles.yml is likely in /project
+RUN dbt deps --profiles-dir .
+
+# dbt profiles.yml — akan di-mount via volume atau env var
+# Default path yang dbt cari: ~/.dbt/profiles.yml
+# Kita simpan di /project dan pass --profiles-dir=/project
+# Port untuk dbt docs serve
+EXPOSE 8080
+
+# Default: tampilkan help (actual command dijalankan via docker-compose
+# atau Airflow BashOperator)
+CMD ["dbt", "--version"]

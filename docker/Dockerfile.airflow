@@ -1,0 +1,27 @@
+# docker/Dockerfile.airflow
+# =========================
+# Extend official Airflow image dengan packages yang dibutuhkan
+# oleh retail_dbt_v2 pipeline.
+
+FROM apache/airflow:2.9.0-python3.12
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /project/retail_raw_data /data \
+    && chown -R airflow:root /project/retail_raw_data /data \
+    && chmod -R 775 /project/retail_raw_data /data
+
+USER airflow
+
+# Install semua packages pipeline
+RUN pip install --no-cache-dir \
+    dbt-duckdb \
+    duckdb \
+    pyarrow \
+    pandas \
+    faker
