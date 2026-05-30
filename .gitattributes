@@ -1,0 +1,21 @@
+# Force GitHub linguist to recognize SQL and dbt files
+*.sql linguist-language=SQL linguist-detectable=true
+*.yml linguist-language=YAML linguist-detectable=true
+dbt_project.yml linguist-language=YAML
+profiles.yml linguist-language=YAML
+packages.yml linguist-language=YAML
+package-lock.yml linguist-language=YAML
+
+# Python files tetap terdeteksi normal
+*.py linguist-language=Python
+
+# Markdown & docs
+*.md linguist-language=Markdown
+*.md linguist-documentation=true
+
+# Override for dbt model files
+models/**/*.sql linguist-language=SQL linguist-detectable=true
+models/**/*.yml linguist-language=YAML linguist-detectable=true
+macros/**/*.sql linguist-language=SQL
+snapshots/**/*.sql linguist-language=SQL
+analyses/**/*.sql linguist-language=SQL

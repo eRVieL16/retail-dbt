@@ -1,0 +1,46 @@
+# ── Secrets & environment ───────────────────────────────────────────────────
+.env
+profiles.yml
+
+# ── dbt artifacts (generated, bukan source code) ────────────────────────────
+target/
+dbt_packages/
+logs/
+
+# ── DuckDB database files ────────────────────────────────────────────────────
+*.duckdb
+*.duckdb.wal
+
+# ── Data files (generated oleh simulator) ───────────────────────────────────
+retail_raw_data/
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Virtual environment ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── IDE & OS ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Elementary (dbt monitoring) ──────────────────────────────────────────────
+edr_target/
+
+
+# ── CONTEXT ──────────────────────────────────────────────
+CONTEXT.md
