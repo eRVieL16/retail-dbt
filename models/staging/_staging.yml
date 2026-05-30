@@ -1,0 +1,143 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: Cleaned and typed orders from raw source
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null]
+      - name: order_status
+        description: Lowercase status setelah LOWER(TRIM()) — bukan kolom 'status'
+        tests:
+          - accepted_values:
+              values: ['completed', 'cancelled', 'returned', 'processing', 'shipped']
+      - name: gross_amount
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: net_amount
+        description: >
+          Bisa negatif jika discount > gross — ditandai is_negative_order = true.
+          Test memastikan tidak ada nilai ekstrem di luar rentang wajar.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000000   # allow negative, tapi tidak sampai -10 juta
+              max_value: 100000000
+      - name: order_date
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2022-01-01'"
+              max_value: "'2025-12-31'"
+
+  - name: stg_order_items
+    description: Line items with orphan flag
+    columns:
+      - name: item_id
+        tests: [not_null, unique]
+      - name: quantity
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+      - name: discount_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+
+  - name: stg_customers
+    description: SCD Type 2 customers — from pre-built dim_customers
+    columns:
+      - name: customer_key
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null]
+      - name: email
+        tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: '^[^@]+@[^@]+\.[^@]+$'
+
+  - name: stg_products
+    description: SCD Type 2 products with margin + price tier
+    columns:
+      - name: product_key
+        tests: [not_null, unique]
+      - name: gross_margin_pct
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -0.5
+              max_value: 1.0
+      - name: price_tier
+        tests:
+          - accepted_values:
+              values: ['budget', 'mid_range', 'premium', 'luxury']
+
+  - name: stg_payments
+    description: Payments with late-arriving detection flag
+    columns:
+      - name: payment_id
+        tests: [not_null, unique]
+      - name: payment_method_group
+        tests:
+          - accepted_values:
+              values: ['card', 'bank_transfer', 'e_wallet', 'cod', 'bnpl', 'other']
+      - name: is_late_arriving
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+  - name: stg_events
+    description: Deduped clickstream events
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: event_type
+        tests:
+          - accepted_values:
+              values: ['page_view', 'product_view', 'add_to_cart', 'checkout_start', 'checkout_complete']
+      - name: funnel_stage
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5           # max 5 karena hanya 5 event type yang valid
+      - name: device
+        tests:
+          - accepted_values:
+              values: ['mobile', 'desktop']
+
+  - name: stg_returns
+    description: Cleaned returns — currency normalized to IDR, reason standardized
+    columns:
+      - name: return_ref
+        tests: [not_null, unique]
+      - name: refund_amount_idr
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: currency
+        tests:
+          - accepted_values:
+              values: ['IDR', 'USD']  # test pada raw currency sebelum normalisasi
+
+  - name: stg_customers_snapshot
+    description: >
+      Customer SCD dari dbt snapshot — tersedia setelah dbt snapshot dijalankan minimal sekali.
+      Tidak bisa ditest sebelum snapshot ada.
+    columns:
+      - name: customer_version_key
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null]
+      - name: segment
+        tests:
+          - accepted_values:
+              values: ['new', 'occasional', 'loyal', 'vip', 'churned']
+      - name: is_current
+        tests:
+          - accepted_values:
+              values: [true, false]
+      - name: generation_cohort
+        tests:
+          - accepted_values:
+              values: ['gen_z', 'millennial', 'gen_x', 'boomer']

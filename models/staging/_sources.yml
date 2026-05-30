@@ -1,0 +1,108 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw CSV files dari retail data simulator.
+      Load ke DuckDB dengan script setup.py sebelum menjalankan dbt.
+    schema: main
+    tables:
+      - name: fact_orders
+        description: Header transaksi order
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+          - name: order_date
+            tests: [not_null]
+          - name: status
+            tests:
+              - accepted_values:
+                  values: ['completed', 'cancelled', 'returned', 'processing', 'shipped']
+
+      - name: fact_order_items
+        description: Line items per order
+        columns:
+          - name: item_id
+            tests: [not_null, unique]
+          - name: order_id
+            tests: [not_null]
+          - name: quantity
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 1
+                  max_value: 10
+
+      - name: dim_customers
+        description: Customer dimension SCD Type 2
+        columns:
+          - name: customer_key
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+          - name: email
+            tests: [not_null]
+
+      - name: dim_products
+        description: Product dimension SCD Type 2
+        columns:
+          - name: product_key
+            tests: [not_null, unique]
+          - name: product_id
+            tests: [not_null]
+
+      - name: dim_stores
+        description: Store dimension (static)
+        columns:
+          - name: store_id
+            tests: [not_null, unique]
+
+      - name: fact_payments
+        description: Payment transactions (bisa split)
+        columns:
+          - name: payment_id
+            tests: [not_null, unique]
+          - name: order_id
+            tests: [not_null]
+          - name: amount
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  strictly: true
+
+      - name: fact_events
+        description: Clickstream events (ada duplicates — handled di staging)
+        columns:
+          - name: event_id
+            tests: [not_null]   # bukan unique karena ada duplikat — di-handle di stg
+
+      - name: raw_returns
+        description: Return requests (messy format)
+        columns:
+          - name: return_ref
+            tests: [not_null]
+
+      - name: raw_inventory_feed
+        description: Weekly inventory snapshot dengan nested JSON
+
+      # ── Sources untuk dbt snapshot ──────────────
+      - name: raw_customers_current
+        description: >
+          Current state customers dari sistem sumber — FLAT, tidak ada histori.
+          dbt snapshot (snp_customers) yang akan track perubahannya.
+        columns:
+          - name: customer_id
+            tests: [not_null, unique]
+          - name: updated_at
+            tests: [not_null]
+
+      - name: raw_products_current
+        description: >
+          Current state products — harga terbaru saja.
+          dbt snapshot (snp_products) yang akan track price history.
+        columns:
+          - name: product_id
+            tests: [not_null, unique]
+          - name: updated_at
+            tests: [not_null]
