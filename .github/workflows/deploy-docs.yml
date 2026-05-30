@@ -1,0 +1,52 @@
+name: Deploy dbt Docs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate raw data
+        run: python simulator/main.py
+
+      - name: Load into DuckDB
+        run: python setup.py --full-refresh
+
+      - name: Create profiles.yml from example
+        run: cp profiles.yml.example profiles.yml
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Run snapshot batch 1
+        run: |
+          python simulator/main.py --snapshot-batch=1
+          python setup.py --snapshot-batch=1
+          dbt snapshot
+
+      - name: dbt build
+        run: dbt build
+
+      - name: Generate dbt docs
+        run: dbt docs generate
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target
+          keep_files: false
