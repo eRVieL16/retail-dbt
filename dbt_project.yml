@@ -1,0 +1,90 @@
+name: 'retail'
+version: '1.0.0'
+config-version: 2
+
+profile: 'retail'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  retail:
+    staging:
+      +materialized: view
+      +schema: staging
+
+    intermediate:
+      +materialized: ephemeral
+
+    marts:
+      +materialized: table
+      core:
+        +schema: core
+      finance:
+        +schema: finance
+      marketing:
+        +schema: marketing
+
+    elementary:
+        +schema: elementary    # elementary writes to a separate schema
+        +enabled: true
+# ── Snapshot config ───────────────────────────
+snapshots:
+  retail:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+# ── Seeds config (lookup tables kecil) ────────
+# seeds:
+#   retail_dbt:
+#     +schema: seeds
+#     +quote_columns: false
+
+vars:
+  start_date: '2023-01-01'
+  end_date:   '2024-12-31'
+  # Jumlah hari lookback untuk incremental models
+  incremental_lookback_days: 3
+  
+  # RFM recency thresholds (days)
+  rfm_recency_days_active:   30
+  rfm_recency_days_recent:   60
+  rfm_recency_days_moderate: 90
+  rfm_recency_days_lapsed:   180
+
+  # RFM frequency thresholds (order count)
+  rfm_freq_champion:  10
+  rfm_freq_loyal:      6
+  rfm_freq_potential:  3
+  rfm_freq_new:        2
+
+  # RFM monetary thresholds (IDR)
+  rfm_monetary_champion:   5000000
+  rfm_monetary_loyal:      2000000
+  rfm_monetary_potential:  1000000
+  rfm_monetary_new:         500000
+
+  # RFM segment score boundaries
+  rfm_segment_champion_min:  13
+  rfm_segment_loyal_min:     10
+  rfm_segment_potential_min:  7
+  rfm_segment_atrisk_min:     4
+
+  # Exchange rates (override at run time for monthly close)
+  usd_to_idr_rate: 15800
+  sgd_to_idr_rate: 11900
+
+  # Generation cohort birth year boundaries
+  gen_z_birth_year_min:       1997
+  millennial_birth_year_min:  1981
+  gen_x_birth_year_min:       1965
+  boomer_birth_year_min:      1946
