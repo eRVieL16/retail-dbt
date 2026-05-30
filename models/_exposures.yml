@@ -1,0 +1,79 @@
+version: 2
+
+exposures:
+
+  - name: retail_executive_dashboard
+    label: "Retail Executive Dashboard"
+    type: dashboard
+    maturity: high
+    url: "https://your-bi-tool.example.com/dashboards/retail-exec"
+    description: >
+      Executive KPI dashboard consuming daily revenue, customer cohort,
+      and funnel conversion metrics. Refreshed daily after the Airflow
+      retail_pipeline DAG completes.
+    depends_on:
+      - ref('fct_revenue_daily')
+      - ref('fct_customer_rfm')
+      - ref('fct_funnel_conversion')
+    owner:
+      name: Analytics Engineering
+      email: analytics@yourcompany.com
+    tags:
+      - finance
+      - executive
+
+  - name: marketing_rfm_report
+    label: "Customer RFM Segmentation Report"
+    type: analysis
+    maturity: medium
+    description: >
+      Weekly RFM segmentation report used by the marketing team to build
+      campaign audiences. RFM thresholds are configurable via dbt vars
+      (rfm_recency_days, rfm_frequency_threshold, rfm_monetary_threshold).
+    depends_on:
+      - ref('fct_customer_rfm')
+      - ref('dim_customers_scd')
+    owner:
+      name: Marketing Analytics
+      email: marketing@yourcompany.com
+    tags:
+      - marketing
+      - rfm
+
+  - name: finance_revenue_reconciliation
+    label: "Finance Revenue Reconciliation"
+    type: ml
+    maturity: low
+    description: >
+      Finance team reconciliation workbook consuming fct_revenue_daily.
+      Used for month-end close. Downstream of currency normalization logic
+      in stg_returns (was_currency_converted flag).
+    depends_on:
+      - ref('fct_revenue_daily')
+      - ref('fct_orders')
+    owner:
+      name: Finance
+      email: finance@yourcompany.com
+    tags:
+      - finance
+      - reconciliation
+
+  - name: data_quality_monitoring
+    label: "Data Quality Audit (run_audit.py)"
+    type: application
+    maturity: high
+    description: >
+      Internal audit script (run_audit.py) consuming the compiled
+      data_quality_audit analysis. Flags orphan records, late-arriving
+      payments, SCD overlaps, and duplicate events.
+    depends_on:
+      - ref('stg_order_items')
+      - ref('stg_payments')
+      - ref('stg_customers')
+      - ref('stg_events')
+    owner:
+      name: Analytics Engineering
+      email: analytics@yourcompany.com
+    tags:
+      - data_quality
+      - observability
