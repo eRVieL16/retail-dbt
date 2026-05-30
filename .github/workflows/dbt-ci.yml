@@ -28,6 +28,9 @@ jobs:
       - name: Load into DuckDB
         run: python setup.py --full-refresh
 
+      - name: Create profiles.yml from example
+        run: cp profiles.yml.example profiles.yml
+
       - name: Install dbt packages
         run: dbt deps
 
