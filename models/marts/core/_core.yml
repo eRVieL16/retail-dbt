@@ -1,0 +1,178 @@
+version: 2
+
+models:
+
+  - name: fct_orders
+    description: >
+      Order-grain fact table. Incremental delete+insert on order_id.
+      Joins orders + customers + payments via int_orders_enriched.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: order_sk
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: order_id
+        data_type: bigint
+        constraints:
+          - type: not_null
+      - name: customer_id
+        data_type: bigint
+        constraints:
+          - type: not_null
+      - name: customer_key
+        data_type: bigint
+      - name: store_id
+        data_type: bigint
+      - name: order_date
+        data_type: date
+      - name: order_date_day
+        data_type: date
+      - name: order_week
+        data_type: date
+      - name: order_month
+        data_type: date
+      - name: first_payment_date
+        data_type: date
+      - name: minutes_to_payment
+        data_type: bigint
+      - name: order_status
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: channel
+        data_type: varchar
+      - name: shipping_city
+        data_type: varchar
+      - name: customer_segment
+        data_type: varchar
+      - name: customer_city
+        data_type: varchar
+      - name: customer_gender
+        data_type: varchar
+      - name: payment_methods_used
+        data_type: varchar
+      - name: is_completed
+        data_type: boolean
+      - name: is_bad_order
+        data_type: boolean
+      - name: is_split_payment
+        data_type: boolean
+      - name: has_late_payment
+        data_type: boolean
+      - name: gross_amount
+        data_type: double
+      - name: discount_total
+        data_type: double
+      - name: net_amount
+        data_type: double
+      - name: total_paid
+        data_type: double
+      - name: updated_at
+        data_type: varchar
+      - name: dbt_loaded_at
+        data_type: timestamp
+        constraints:
+          - type: not_null
+
+  - name: fct_events_incremental
+    description: >
+      Event-grain fact table. delete+insert on event_id.
+      Late-arriving events handled via lookback window (default 3 days).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: event_id
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: session_id
+        data_type: varchar
+      - name: customer_id
+        data_type: double
+      - name: product_id
+        data_type: double
+      - name: event_type
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: event_ts
+        data_type: timestamp
+        constraints:
+          - type: not_null
+      - name: event_date
+        data_type: date
+      - name: event_hour
+        data_type: integer
+      - name: channel
+        data_type: varchar
+      - name: device
+        data_type: varchar
+      - name: funnel_stage
+        data_type: integer
+      - name: ingested_at
+        data_type: varchar
+      - name: batch_id
+        data_type: varchar
+      - name: dbt_loaded_at
+        data_type: timestamp
+        constraints:
+          - type: not_null
+
+  - name: dim_customers_scd
+    description: >
+      SCD Type 2 customer dimension. valid_from/valid_to tracks attribute
+      changes. is_current = true untuk record terbaru.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: customer_key
+        data_type: bigint
+        constraints:
+          - type: not_null
+      - name: customer_id
+        data_type: bigint
+        constraints:
+          - type: not_null
+      - name: full_name
+        data_type: varchar
+      - name: email
+        data_type: varchar
+      - name: phone
+        data_type: varchar
+      - name: gender
+        data_type: varchar
+      - name: date_of_birth
+        data_type: varchar
+      - name: age_years
+        data_type: bigint
+        description: Derived via date_diff — tidak ada di staging
+      - name: generation_cohort
+        data_type: varchar
+        description: Derived dari tahun lahir via macro generation_cohort()
+      - name: city
+        data_type: varchar
+      - name: segment
+        data_type: varchar
+      - name: referral_code
+        data_type: varchar
+      - name: valid_from
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: valid_to
+        data_type: varchar
+      - name: is_current
+        data_type: boolean
+        constraints:
+          - type: not_null
+      - name: has_scd_overlap
+        data_type: boolean
+      - name: updated_at
+        data_type: varchar
+      - name: valid_to_date_safe
+        data_type: date
